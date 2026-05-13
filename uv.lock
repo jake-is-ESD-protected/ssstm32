@@ -400,6 +400,14 @@ wheels = [
 ]
 
 [[package]]
+name = "jescorecli"
+version = "1.0.3"
+source = { git = "https://github.com/jesdev-io/jescorecli#fdb8541ea9d60ea3b77cb584a9e009f32e4a4519" }
+dependencies = [
+    { name = "pyserial" },
+]
+
+[[package]]
 name = "kiwisolver"
 version = "1.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -972,6 +980,7 @@ name = "ssstm32"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "jescorecli" },
     { name = "platformio" },
     { name = "pyfar" },
 ]
@@ -983,6 +992,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "jescorecli", git = "https://github.com/jesdev-io/jescorecli" },
     { name = "platformio", specifier = ">=6.1.19" },
     { name = "pyfar", git = "https://github.com/pyfar/pyfar?rev=fd33a589807f75ef238c5ac7f6436276eb4503e3" },
 ]
