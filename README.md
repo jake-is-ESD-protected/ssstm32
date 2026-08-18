@@ -29,9 +29,17 @@ x[k+1] = A x[k] + B u[k]
 
 State resets at firmware boot. The USB transport adapter, TinyUSB descriptors, and STM32 port live outside this file.
 
-## Measure headroom
+## Benchmark
 
-Run the `tinyusb_audio` jescore job while audio is streaming. `audio cycles` reports maximum observed cycles for the state-space frame (`dsp`), the full USB-audio processing pass (`worker`), and one callback sample, against their 1 ms and 1/48,000 s deadlines. `free` is the remaining percentage in each budget. Run `tinyusb_audio_zero` before a new measurement.
+Flash and run a deterministic state-space benchmark without an audio source:
+
+```bash
+scripts/bench.sh /dev/ttyACM0
+```
+
+It reports average cycles per `audio_process()` call and remaining 48 kHz sample-budget headroom. The benchmark pauses USB processing, resets model state before and after the run, and does not measure USB overhead.
+
+For end-to-end headroom, run `tinyusb_audio_zero`, stream real audio, then run the `tinyusb_audio` jescore job. Its `audio cycles` reports maximum observed cycles for the state-space frame (`dsp`), full USB-audio processing pass (`worker`), and one callback sample.
 
 ## Pinned upstream sources
 

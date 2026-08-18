@@ -33,6 +33,7 @@ const usb_audio_device_descriptor_config_t usb_audio_device_config = {
 #define OUT_BYTES_PER_MS      (SAMPLES_PER_MS * USB_SPEAKER_CHANNELS * USB_BYTES_PER_SAMPLE)
 #define IN_BYTES_PER_MS       (SAMPLES_PER_MS * USB_MIC_CHANNELS * USB_BYTES_PER_SAMPLE)
 #define MIC_RING_FRAMES       64U
+#define BENCHMARK_SAMPLES     48000U
 
 static volatile uint8_t audio_mute[3];          // 0=master, 1=left/playback, 2=right/playback
 static volatile int16_t audio_volume_db256[3];  // UAC1 volume unit: 1/256 dB
@@ -70,6 +71,7 @@ static volatile uint32_t max_process_cycles;
 static volatile uint32_t max_worker_cycles;
 static volatile uint32_t max_sample_cycles;
 static volatile bool stream_enabled = true;
+static volatile float benchmark_sink;
 
 static uint8_t out_buf[OUT_BYTES_PER_MS];
 static uint8_t in_buf[IN_BYTES_PER_MS];
@@ -230,6 +232,34 @@ static void tinyusb_audio_zero(void *p) {
   jes_print("tinyusb_audio counters zeroed\n\r");
 }
 
+static void tinyusb_audio_bench(void *p) {
+  (void)p;
+  bool stream_was_enabled = stream_enabled;
+  stream_enabled = false;
+  mic_ring_count = 0;
+  jes_delay_job_ms(2);
+  audio_process_reset();
+
+  float out_l = 0.0f;
+  float out_r = 0.0f;
+  uint32_t start = DWT->CYCCNT;
+  for (uint32_t sample = 0; sample < BENCHMARK_SAMPLES; ++sample) {
+    float in_l = (sample & 1U) ? 0.5f : -0.5f;
+    float in_r = (sample & 2U) ? 0.25f : -0.25f;
+    audio_process(in_l, in_r, &out_l, &out_r);
+  }
+  uint32_t cycles = DWT->CYCCNT - start;
+  uint32_t average = cycles / BENCHMARK_SAMPLES;
+  uint32_t budget = SystemCoreClock / USB_AUDIO_SAMPLE_RATE;
+  uint32_t headroom = average < budget ? 100U - (100U * average / budget) : 0U;
+  benchmark_sink = out_l + out_r;
+  audio_process_reset();
+  stream_enabled = stream_was_enabled;
+
+  jes_print("bench samples=%lu cycles=%lu avg=%lu/%lu (%lu%% free)\n\r",
+            BENCHMARK_SAMPLES, cycles, average, budget, headroom);
+}
+
 static void tinyusb_audio_worker(void *p) {
   (void)p;
   port_usb_peripheral_init();
@@ -259,6 +289,7 @@ void port_setup(void) {
   jes_register_job("tinyusb_audio_on", 1024, 1, tinyusb_audio_on, 0, 0);
   jes_register_job("tinyusb_audio_off", 1024, 1, tinyusb_audio_off, 0, 0);
   jes_register_job("tinyusb_audio_zero", 1024, 1, tinyusb_audio_zero, 0, 0);
+  jes_register_job("tinyusb_audio_bench", 2048, 1, tinyusb_audio_bench, 0, 0);
   jes_register_and_launch_job("_tinyusb_audio", 2048, 3, tinyusb_audio_worker, 1, 0);
   jes_dispatch();
 }
