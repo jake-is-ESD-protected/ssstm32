@@ -66,6 +66,9 @@ static volatile uint32_t multi_read_calls;
 static volatile uint32_t max_reads_per_call;
 static volatile uint32_t ring_overflows;
 static volatile uint32_t max_ring_fill;
+static volatile uint32_t max_process_cycles;
+static volatile uint32_t max_worker_cycles;
+static volatile uint32_t max_sample_cycles;
 static volatile bool stream_enabled = true;
 
 static uint8_t out_buf[OUT_BYTES_PER_MS];
@@ -89,12 +92,16 @@ static void reset_stream_counters(void) {
   max_reads_per_call = 0;
   ring_overflows = 0;
   max_ring_fill = 0;
+  max_process_cycles = 0;
+  max_worker_cycles = 0;
+  max_sample_cycles = 0;
   mic_ring_head = 0;
   mic_ring_tail = 0;
   mic_ring_count = 0;
 }
 
 static void enqueue_microphone_frame_from_speaker_frame(void) {
+  uint32_t frame_start = DWT->CYCCNT;
   if (mic_ring_count >= MIC_RING_FRAMES) {
     mic_ring_tail = (mic_ring_tail + 1U) % MIC_RING_FRAMES;
     mic_ring_count--;
@@ -106,12 +113,18 @@ static void enqueue_microphone_frame_from_speaker_frame(void) {
   for (uint32_t i = 0; i < SAMPLES_PER_MS; i++) {
     float out_l;
     float out_r;
+    uint32_t sample_start = DWT->CYCCNT;
     audio_process(pcm_to_float(src[USB_SPEAKER_CHANNELS * i]),
                   pcm_to_float(src[USB_SPEAKER_CHANNELS * i + 1U]),
                   &out_l, &out_r);
+    uint32_t sample_cycles = DWT->CYCCNT - sample_start;
+    if (sample_cycles > max_sample_cycles) max_sample_cycles = sample_cycles;
     dst[USB_MIC_CHANNELS * i] = apply_audio_control(out_l, 1);
     dst[USB_MIC_CHANNELS * i + 1U] = apply_audio_control(out_r, 2);
   }
+
+  uint32_t frame_cycles = DWT->CYCCNT - frame_start;
+  if (frame_cycles > max_process_cycles) max_process_cycles = frame_cycles;
 
   mic_ring_head = (mic_ring_head + 1U) % MIC_RING_FRAMES;
   mic_ring_count++;
@@ -161,8 +174,11 @@ static void write_next_microphone_frame(void) {
 }
 
 static void process_audio(void) {
+  uint32_t worker_start = DWT->CYCCNT;
   drain_speaker_out();
   write_next_microphone_frame();
+  uint32_t worker_cycles = DWT->CYCCNT - worker_start;
+  if (worker_cycles > max_worker_cycles) max_worker_cycles = worker_cycles;
 }
 
 static void tinyusb_audio_status(void *p) {
@@ -176,6 +192,18 @@ static void tinyusb_audio_status(void *p) {
             fresh_writes, silence_writes, short_writes, multi_read_calls, max_reads_per_call);
   jes_print("usb ring now=%lu max=%lu ovf=%lu\n\r",
             mic_ring_count, max_ring_fill, ring_overflows);
+  uint32_t frame_budget = SystemCoreClock / 1000U;
+  uint32_t sample_budget = SystemCoreClock / USB_AUDIO_SAMPLE_RATE;
+  uint32_t frame_headroom = max_process_cycles < frame_budget ?
+      100U - (100U * max_process_cycles / frame_budget) : 0U;
+  uint32_t worker_headroom = max_worker_cycles < frame_budget ?
+      100U - (100U * max_worker_cycles / frame_budget) : 0U;
+  uint32_t sample_headroom = max_sample_cycles < sample_budget ?
+      100U - (100U * max_sample_cycles / sample_budget) : 0U;
+  jes_print("audio cycles dsp=%lu/%lu (%lu%% free) worker=%lu/%lu (%lu%% free) sample=%lu/%lu (%lu%% free)\n\r",
+            max_process_cycles, frame_budget, frame_headroom,
+            max_worker_cycles, frame_budget, worker_headroom,
+            max_sample_cycles, sample_budget, sample_headroom);
   jes_print("usb mixer mute=%u,%u,%u vol_db=%ld,%ld,%ld\n\r",
             audio_mute[0], audio_mute[1], audio_mute[2],
             (long)(audio_volume_db256[0] / 256),
@@ -223,6 +251,9 @@ static void tinyusb_audio_worker(void *p) {
 }
 
 void port_setup(void) {
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
   jes_init();
   jes_register_job("tinyusb_audio", 1536, 1, tinyusb_audio_status, 0, 0);
   jes_register_job("tinyusb_audio_on", 1024, 1, tinyusb_audio_on, 0, 0);

@@ -29,6 +29,10 @@ x[k+1] = A x[k] + B u[k]
 
 State resets at firmware boot. The USB transport adapter, TinyUSB descriptors, and STM32 port live outside this file.
 
+## Measure headroom
+
+Run the `tinyusb_audio` jescore job while audio is streaming. `audio cycles` reports maximum observed cycles for the state-space frame (`dsp`), the full USB-audio processing pass (`worker`), and one callback sample, against their 1 ms and 1/48,000 s deadlines. `free` is the remaining percentage in each budget. Run `tinyusb_audio_zero` before a new measurement.
+
 ## Pinned upstream sources
 
 - `jescore`: `e81b78f28210e4fbc67edf53b97a846b7b90bc03`

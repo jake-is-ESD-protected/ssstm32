@@ -105,7 +105,7 @@ uint8_t const * tud_descriptor_device_cb(void)
   #define EPNUM_AUDIO_INT   0x02
 #endif
 
-#define CONFIG_UAC1_TOTAL_LEN    	(TUD_CONFIG_DESC_LEN + TUD_AUDIO10_HEADSET_STEREO_DESC_LEN(2))
+#define CONFIG_UAC1_TOTAL_LEN    	(TUD_CONFIG_DESC_LEN + TUD_AUDIO10_HEADSET_STEREO_DESC_LEN(1))
 
 uint8_t const desc_uac1_configuration[] =
 {
@@ -118,7 +118,7 @@ uint8_t const desc_uac1_configuration[] =
       CFG_TUD_AUDIO_FUNC_1_FORMAT_1_N_BYTES_PER_SAMPLE_TX, CFG_TUD_AUDIO_FUNC_1_FORMAT_1_RESOLUTION_TX, \
       EPNUM_AUDIO_OUT, CFG_TUD_AUDIO10_FUNC_1_FORMAT_1_EP_SZ_OUT, \
       EPNUM_AUDIO_IN | 0x80, CFG_TUD_AUDIO10_FUNC_1_FORMAT_1_EP_SZ_IN, \
-      44100, 48000)
+      48000)
 };
 
 TU_VERIFY_STATIC(sizeof(desc_uac1_configuration) == CONFIG_UAC1_TOTAL_LEN, "Incorrect size");
